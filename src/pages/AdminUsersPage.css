@@ -1,0 +1,225 @@
+.admin-users-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding-bottom: var(--space-8);
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-tertiary);
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    margin-bottom: var(--space-4);
+    transition: color 0.2s;
+}
+
+.back-link:hover {
+    color: var(--text-primary);
+}
+
+.users-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.create-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: var(--space-2) var(--space-4);
+    background: var(--accent-cyan);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.create-btn:hover {
+    background: #00b4d8;
+    transform: translateY(-1px);
+}
+
+.create-btn:active {
+    transform: translateY(0);
+}
+
+.search-bar {
+    max-width: 400px;
+    width: 100%;
+}
+
+.users-table-card {
+    padding: var(--space-2);
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.user-info strong {
+    color: var(--text-primary);
+    font-size: var(--fs-base);
+}
+
+.user-info span {
+    color: var(--text-tertiary);
+    font-size: var(--fs-xs);
+}
+
+.tier-select {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
+    outline: none;
+    cursor: pointer;
+}
+
+.tier-select:focus {
+    border-color: var(--accent-cyan);
+}
+
+.admin-notification {
+    background: rgba(6, 214, 160, 0.1);
+    color: var(--accent-green);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    text-align: center;
+    font-weight: 600;
+}
+
+.admin-notification.error {
+    background: rgba(255, 42, 95, 0.1);
+    color: var(--accent-red);
+}
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: var(--space-4);
+}
+
+.modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 500px;
+    padding: var(--space-6);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-6);
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: var(--fs-xl);
+    font-family: var(--font-display);
+}
+
+.close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 4px;
+    transition: color 0.2s;
+}
+
+.close-btn:hover {
+    color: var(--text-primary);
+}
+
+.modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.form-group input,
+.form-group select {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-base);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: var(--accent-cyan);
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.btn-delete {
+    background: rgba(255, 42, 95, 0.1);
+    color: var(--accent-red);
+    border: 1px solid transparent;
+    padding: 6px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-delete:hover {
+    background: var(--accent-red);
+    color: white;
+}
+
+.actions-cell {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}

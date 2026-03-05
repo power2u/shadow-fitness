@@ -1,0 +1,82 @@
+.modal-root {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    /* Ensure it sits above everything, including sidebar */
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 6, 12, 0.85);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-6);
+}
+
+.modal-container {
+    width: 100%;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+    position: relative;
+    overflow: hidden;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    padding: var(--space-5) var(--space-6);
+    border-bottom: 1px solid var(--border-subtle);
+    background: rgba(255, 255, 255, 0.01);
+}
+
+.modal-header h2 {
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.modal-content {
+    flex: 1;
+    overflow-y: auto;
+    /* Custom scrollbar for better visibility on dark backgrounds */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-medium) transparent;
+}
+
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: var(--border-medium);
+    border-radius: 3px;
+}
+
+.modal-close {
+    margin-right: calc(var(--space-2) * -1);
+}
+
+@media (max-width: 768px) {
+    .modal-overlay {
+        padding: var(--space-4);
+        align-items: flex-end;
+        /* Mobile-style bottom sheet look */
+    }
+
+    .modal-container {
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        max-height: 95vh;
+    }
+}
