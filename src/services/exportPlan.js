@@ -29,6 +29,14 @@ function safeTxt(text) {
     return String(text || '').replace(/[^\x00-\x7F]/g, '').trim() || '-';
 }
 
+function getSafeFilename(prefix, clientName, ext) {
+    const cleanName = String(clientName || 'Unknown')
+        .replace(/[^\w\s-]/g, '')
+        .trim()
+        .replace(/\s+/g, '_');
+    return `${prefix}_${cleanName}.${ext}`;
+}
+
 function checkPage(doc, y, margin = 250) {
     if (y > margin) { doc.addPage(); return 20; }
     return y;
@@ -128,7 +136,7 @@ export function exportWorkoutPDF(plan, clientName) {
         }
 
         console.log('[Export] Saving workout PDF');
-        doc.save('ShadowFitness_Workout_' + safeTxt(clientName).replace(/\s/g, '_') + '.pdf');
+        doc.save(getSafeFilename('ShadowFitness_Workout', clientName, 'pdf'));
     } catch (err) {
         console.error('[Export] PDF export failed:', err);
         alert('PDF export failed: ' + err.message);
@@ -224,7 +232,7 @@ export function exportMealPDF(plan, clientName) {
             });
         }
 
-        doc.save('ShadowFitness_MealPlan_' + safeTxt(clientName).replace(/\s/g, '_') + '.pdf');
+        doc.save(getSafeFilename('ShadowFitness_MealPlan', clientName, 'pdf'));
     } catch (err) {
         console.error('PDF export failed:', err);
         alert('PDF export failed: ' + err.message);
@@ -308,7 +316,7 @@ export async function exportWorkoutDOCX(plan, clientName) {
         console.log('[Export] Packing workout DOCX with', children.length, 'elements');
         const doc = new Document({ sections: [{ children }] });
         const blob = await Packer.toBlob(doc);
-        saveAs(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), 'ShadowFitness_Workout_' + clientName.replace(/\s/g, '_') + '.docx');
+        saveAs(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), getSafeFilename('ShadowFitness_Workout', clientName, 'docx'));
     } catch (err) {
         console.error('DOCX export failed:', err);
         alert('DOCX export failed: ' + err.message);
@@ -357,7 +365,7 @@ export async function exportMealDOCX(plan, clientName) {
         console.log('[Export] Packing meal DOCX with', children.length, 'elements');
         const doc = new Document({ sections: [{ children }] });
         const blob = await Packer.toBlob(doc);
-        saveAs(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), 'ShadowFitness_MealPlan_' + clientName.replace(/\s/g, '_') + '.docx');
+        saveAs(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), getSafeFilename('ShadowFitness_MealPlan', clientName, 'docx'));
     } catch (err) {
         console.error('DOCX export failed:', err);
         alert('DOCX export failed: ' + err.message);

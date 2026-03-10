@@ -182,19 +182,63 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    position: relative;
+}
+
+.history-info-tip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-glass-strong);
+    border: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-bottom: var(--space-2);
 }
 
 .history-item {
-    padding: 1rem;
+    padding: 1.25rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    transition: all 0.2s var(--ease-out);
+}
+
+.interactive-item {
+    cursor: pointer;
+}
+
+.interactive-item:hover {
+    background: var(--bg-glass-strong);
+    border-color: var(--primary-main);
+    transform: translateX(4px);
+}
+
+.history-item-ident {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.history-icon-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-glass);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-main);
+    border: 1px solid var(--border-subtle);
 }
 
 .history-item-header h4 {
     font-size: 0.9375rem;
     margin-bottom: 0.25rem;
+    color: var(--text-primary);
 }
 
 .history-date {
@@ -203,6 +247,46 @@
     gap: 4px;
     font-size: 0.75rem;
     color: var(--text-tertiary);
+}
+
+.history-item-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+/* Workout View Overlay */
+.client-profile-container {
+    position: relative;
+    min-height: 400px;
+}
+
+.plan-view-overlay {
+    position: absolute;
+    top: -1rem;
+    left: -1rem;
+    right: -1rem;
+    bottom: -1rem;
+    background: var(--bg-card);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+}
+
+.overlay-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-4);
+}
+
+.overlay-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: var(--space-2);
 }
 
 .history-loading {

@@ -306,7 +306,7 @@ export default function WorkoutBuilderPage() {
         try {
             const relevant = getRelevantKnowledge(selectedClient, []);
             const cycleConstraints = computeCycleConstraints(selectedClient.questionnaire, tierGuard.getTier());
-            const focusConstraints = getFocusConstraints(focusArea, focusBias);
+            const focusConstraints = getFocusConstraints(focusArea, focusBias, selectedClient.questionnaire?.daysPerWeek);
 
             const result = await geminiService.generateWorkoutPlan(
                 selectedClient,
@@ -332,7 +332,7 @@ export default function WorkoutBuilderPage() {
         try {
             const relevant = getRelevantKnowledge(selectedClient, []);
             const cycleConstraints = computeCycleConstraints(selectedClient.questionnaire, tierGuard.getTier());
-            const focusConstraints = getFocusConstraints(focusArea, focusBias);
+            const focusConstraints = getFocusConstraints(focusArea, focusBias, selectedClient.questionnaire?.daysPerWeek);
             const newDay = await geminiService.regenerateWorkoutDay(selectedClient, plan, dayIndex, relevant, cycleConstraints, focusConstraints);
             if (newDay) {
                 const updated = { ...plan, weeklySchedule: [...plan.weeklySchedule] };
@@ -355,7 +355,7 @@ export default function WorkoutBuilderPage() {
             const planToSave = {
                 coach_id: user.id,
                 client_id: selectedClient.id,
-                plan_name: `Workout for ${selectedClient.full_name}`,
+                plan_name: `Workout for ${selectedClient.full_name} — ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`,
                 plan_json: plan,
                 focus_muscle: focusArea !== 'None' ? focusArea : null,
                 focus_bias_level: focusArea !== 'None' ? focusBias : null,
@@ -599,10 +599,37 @@ export default function WorkoutBuilderPage() {
                                 </div>
                             )}
 
+                            {/* ── Focus Metadata Banner ── */}
+                            {plan.focusMetadata && (
+                                <motion.div
+                                    className="focus-meta-banner glass-card"
+                                    initial={{ opacity: 0, y: -8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                >
+                                    <div className="focus-meta-left">
+                                        <Target size={16} className="focus-meta-icon" />
+                                        <div>
+                                            <span className="focus-meta-label">Focus Applied</span>
+                                            <div className="focus-meta-row">
+                                                <span className="badge badge-violet">{plan.focusMetadata.focus_area}</span>
+                                                <span className="badge badge-blue">{plan.focusMetadata.bias_level}</span>
+                                                <span className="focus-meta-mul">{plan.focusMetadata.volume_multiplier_applied}× target volume</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {plan.focusMetadata.antagonist_compliance && (
+                                        <p className="focus-meta-compliance">
+                                            ✓ {plan.focusMetadata.antagonist_compliance}
+                                        </p>
+                                    )}
+                                </motion.div>
+                            )}
+
                             {/* ── Female Cycle Banner ── */}
                             {cycleClient && plan.cycleContext && (
                                 <CyclePhaseBanner cycleContext={plan.cycleContext} />
                             )}
+
 
                             {/* Warnings */}
                             {plan.warnings?.filter(Boolean).length > 0 && (

@@ -1,0 +1,201 @@
+.workout-viewer {
+    padding: var(--space-4) 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+}
+
+.viewer-header-bar {
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: var(--space-4);
+}
+
+.viewer-title-group h2 {
+    font-size: var(--fs-xl);
+    margin-bottom: var(--space-2);
+}
+
+.viewer-summary {
+    color: var(--text-secondary);
+    font-size: var(--fs-base);
+    line-height: 1.5;
+}
+
+.viewer-meta-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-secondary);
+    font-size: var(--fs-sm);
+    background: var(--bg-glass);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    width: fit-content;
+}
+
+/* Cycle Banner */
+.viewer-cycle-banner {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.cycle-banner-content {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.cycle-banner-icon {
+    font-size: 1.5rem;
+}
+
+.cycle-banner-text {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 600;
+    font-size: var(--fs-md);
+}
+
+.cycle-banner-label {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.cycle-banner-note {
+    font-style: italic;
+    font-size: var(--fs-sm);
+    opacity: 0.9;
+    border-left: 2px solid currentColor;
+    padding-left: var(--space-3);
+}
+
+/* Schedule Grid */
+.viewer-schedule-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--space-4);
+}
+
+.viewer-day-card {
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.vday-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: var(--space-2);
+}
+
+.vday-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.vday-label {
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.vday-name {
+    font-size: var(--fs-md);
+    font-weight: 700;
+}
+
+.vday-focus {
+    font-size: var(--fs-xs);
+    padding: 2px 8px;
+    background: var(--bg-glass-strong);
+    border-radius: var(--radius-sm);
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+.focus-rest {
+    color: var(--text-secondary);
+}
+
+.vday-exercises {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.vday-exercise-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.v-ex-name {
+    font-weight: 600;
+    font-size: var(--fs-sm);
+}
+
+.v-ex-params {
+    display: flex;
+    gap: var(--space-3);
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+}
+
+.v-ex-notes {
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    margin-top: 2px;
+}
+
+.vday-rest-text {
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: var(--fs-sm);
+}
+
+.vsection-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 700;
+    margin-bottom: var(--space-3);
+    color: var(--text-primary);
+}
+
+.vreasoning-list {
+    padding-left: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    color: var(--text-secondary);
+    font-size: var(--fs-sm);
+}
+
+.vreasoning-list li {
+    position: relative;
+}
+
+.vcardio-sessions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+}
+
+.vcardio-session {
+    background: var(--bg-glass);
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--fs-xs);
+}

@@ -6,14 +6,17 @@ import { clientService } from '../services/supabase';
 import { tierGuard } from '../services/tierGuard';
 import {
     Plus, Search, Users, Trash2, ArrowRight, X,
-    Dumbbell, Calendar, Heart, FileText, ClipboardList
+    Dumbbell, Calendar, Heart, FileText, ClipboardList, Info,
+    Eye, Copy, ScrollText, ChevronLeft, Utensils
 } from 'lucide-react';
 import QuestionnaireForm from '../components/questionnaire/QuestionnaireForm';
 import UpgradeModal from '../components/ui/UpgradeModal';
 import './ClientsPage.css';
 
 import Modal from '../components/ui/Modal';
-import { workoutService } from '../services/supabase';
+import { workoutService, mealService } from '../services/supabase';
+import WorkoutViewer from '../components/workouts/WorkoutViewer';
+import MealViewer from '../components/meals/MealViewer';
 
 export default function ClientsPage() {
     const { user } = useAuth();
@@ -27,7 +30,12 @@ export default function ClientsPage() {
     const [upgradeReason, setUpgradeReason] = useState('');
     const [history, setHistory] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
-    const [activeTab, setActiveTab] = useState('profile'); // 'profile' or 'history'
+    const [mealHistory, setMealHistory] = useState([]);
+    const [loadingMealHistory, setLoadingMealHistory] = useState(false);
+    const [activeTab, setActiveTab] = useState('profile'); // 'profile', 'history', 'meals'
+    const [archivingId, setArchivingId] = useState(null);
+    const [viewingPlan, setViewingPlan] = useState(null);
+    const [viewingMeal, setViewingMeal] = useState(null);
 
     useEffect(() => {
         if (user) loadClients();
@@ -48,7 +56,8 @@ export default function ClientsPage() {
         setLoadingHistory(true);
         try {
             const data = await workoutService.getByClientId(clientId);
-            setHistory(data || []);
+            // Only show active plans (not archived)
+            setHistory((data || []).filter(p => p.status !== 'archived'));
         } catch (err) {
             console.error('Error loading history:', err);
         } finally {
@@ -56,9 +65,48 @@ export default function ClientsPage() {
         }
     };
 
+    const loadMealHistory = async (clientId) => {
+        setLoadingMealHistory(true);
+        try {
+            const data = await mealService.getByClientId(clientId);
+            setMealHistory((data || []).filter(p => p.status !== 'archived'));
+        } catch (err) {
+            console.error('Error loading meal history:', err);
+        } finally {
+            setLoadingMealHistory(false);
+        }
+    };
+
+    const handleArchivePlan = async (planId) => {
+        setArchivingId(planId);
+        try {
+            await workoutService.archive(planId);
+            setHistory(prev => prev.filter(p => p.id !== planId));
+        } catch (err) {
+            console.error('Error archiving plan:', err);
+        } finally {
+            setArchivingId(null);
+        }
+    };
+
+    const handleDuplicatePlan = (plan) => {
+        const draftPlan = workoutService.duplicate(plan);
+        localStorage.setItem('shadow_fitness_active_plan', JSON.stringify(draftPlan));
+        setSelectedClient(null);
+        navigate('/dashboard/workouts');
+    };
+
+    const handleDuplicateMeal = (plan) => {
+        const draftPlan = mealService.duplicate(plan);
+        localStorage.setItem('shadow_fitness_active_meal_plan', JSON.stringify(draftPlan));
+        setSelectedClient(null);
+        navigate('/dashboard/meals');
+    };
+
     useEffect(() => {
         if (selectedClient) {
             loadHistory(selectedClient.id);
+            loadMealHistory(selectedClient.id);
             setActiveTab('profile');
         }
     }, [selectedClient]);
@@ -223,6 +271,12 @@ export default function ClientsPage() {
                             >
                                 <Dumbbell size={16} /> Workout History
                             </button>
+                            <button
+                                className={`profile-tab ${activeTab === 'meals' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('meals')}
+                            >
+                                <Utensils size={16} /> Meal History
+                            </button>
                         </div>
 
                         <div className="profile-tab-content">
@@ -245,7 +299,7 @@ export default function ClientsPage() {
                                         <p style={{ color: 'var(--text-secondary)' }}>No questionnaire data available.</p>
                                     )}
                                 </div>
-                            ) : (
+                            ) : activeTab === 'history' ? (
                                 <div className="history-content">
                                     {loadingHistory ? (
                                         <div className="history-loading">
@@ -257,32 +311,98 @@ export default function ClientsPage() {
                                         </div>
                                     ) : (
                                         <div className="history-list">
+                                            <div className="history-info-tip glass-card">
+                                                <Info size={14} />
+                                                <span><strong>Archive</strong> removes plans from this active list but retains the data for duplication or future reference. Click a workout to view details.</span>
+                                            </div>
                                             {history.map((plan, i) => (
-                                                <div key={plan.id || i} className="history-item glass-card">
+                                                <div
+                                                    key={plan.id || i}
+                                                    className="history-item glass-card interactive-item"
+                                                    onClick={() => setViewingPlan(plan)}
+                                                >
                                                     <div className="history-item-header">
-                                                        <div>
-                                                            <h4>{plan.plan_name}</h4>
-                                                            <span className="history-date">
-                                                                <Calendar size={12} /> {new Date(plan.created_at).toLocaleDateString()}
-                                                            </span>
+                                                        <div className="history-item-ident">
+                                                            <div className="history-icon-circle">
+                                                                <ScrollText size={16} />
+                                                            </div>
+                                                            <div>
+                                                                <h4>{plan.plan_name}</h4>
+                                                                <span className="history-date">
+                                                                    <Calendar size={12} /> {new Date(plan.created_at).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                         {plan.focus_muscle && (
                                                             <span className="badge badge-violet">
-                                                                Focus: {plan.focus_muscle} ({plan.focus_bias_level})
+                                                                Focus: {plan.focus_muscle}
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <div className="history-item-actions">
+                                                    <div className="history-item-actions" onClick={e => e.stopPropagation()}>
+                                                        <button
+                                                            className="btn btn-secondary btn-sm"
+                                                            onClick={() => setViewingPlan(plan)}
+                                                        >
+                                                            <Eye size={14} /> View
+                                                        </button>
                                                         <button
                                                             className="btn btn-ghost btn-sm"
-                                                            onClick={() => {
-                                                                // In a real app we'd navigate to builder with this plan loaded
-                                                                // For now, just a placeholder or shortcut
-                                                                localStorage.setItem('shadow_fitness_active_plan', JSON.stringify(plan.plan_json));
-                                                                navigate('/dashboard/workouts');
-                                                            }}
+                                                            onClick={() => handleDuplicatePlan(plan)}
+                                                            title="Load as a new Draft in Workout Builder"
                                                         >
-                                                            Load Plan
+                                                            <Copy size={14} /> Duplicate
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="history-content">
+                                    {loadingMealHistory ? (
+                                        <div className="history-loading">
+                                            <div className="spinner" /> Loading meal history...
+                                        </div>
+                                    ) : mealHistory.length === 0 ? (
+                                        <div className="empty-history">
+                                            <p>No saved meal plans found for this client.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="history-list">
+                                            {mealHistory.map((plan, i) => (
+                                                <div
+                                                    key={plan.id || i}
+                                                    className="history-item glass-card interactive-item"
+                                                    onClick={() => setViewingMeal(plan)}
+                                                >
+                                                    <div className="history-item-header">
+                                                        <div className="history-item-ident">
+                                                            <div className="history-icon-circle">
+                                                                <Utensils size={16} />
+                                                            </div>
+                                                            <div>
+                                                                <h4>{plan.plan_name}</h4>
+                                                                <span className="history-date">
+                                                                    <Calendar size={12} /> {new Date(plan.created_at).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="history-item-actions" onClick={e => e.stopPropagation()}>
+                                                        <button
+                                                            className="btn btn-secondary btn-sm"
+                                                            onClick={() => setViewingMeal(plan)}
+                                                        >
+                                                            <Eye size={14} /> View
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-ghost btn-sm"
+                                                            onClick={() => handleDuplicateMeal(plan)}
+                                                            title="Load as a new Draft in Meal Builder"
+                                                        >
+                                                            <Copy size={14} /> Duplicate
                                                         </button>
                                                     </div>
                                                 </div>
@@ -292,6 +412,55 @@ export default function ClientsPage() {
                                 </div>
                             )}
                         </div>
+
+                        {/* Overlays */}
+                        <AnimatePresence>
+                            {viewingPlan && (
+                                <motion.div
+                                    className="plan-view-overlay"
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 20 }}
+                                >
+                                    <div className="overlay-header">
+                                        <button className="btn btn-ghost btn-sm" onClick={() => setViewingPlan(null)}>
+                                            <ChevronLeft size={16} /> Back to History
+                                        </button>
+                                        <div className="header-actions">
+                                            <button className="btn btn-primary btn-sm" onClick={() => handleDuplicatePlan(viewingPlan)}>
+                                                <Copy size={14} /> Duplicate & Edit
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="overlay-content">
+                                        <WorkoutViewer plan={viewingPlan.plan_json} />
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {viewingMeal && (
+                                <motion.div
+                                    className="plan-view-overlay"
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 20 }}
+                                >
+                                    <div className="overlay-header">
+                                        <button className="btn btn-ghost btn-sm" onClick={() => setViewingMeal(null)}>
+                                            <ChevronLeft size={16} /> Back to History
+                                        </button>
+                                        <div className="header-actions">
+                                            <button className="btn btn-primary btn-sm" onClick={() => handleDuplicateMeal(viewingMeal)}>
+                                                <Copy size={14} /> Duplicate & Edit
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="overlay-content">
+                                        <MealViewer plan={viewingMeal.plan_json} showActions={false} />
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 )}
             </Modal>

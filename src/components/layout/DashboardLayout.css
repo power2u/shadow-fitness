@@ -104,9 +104,20 @@
     padding: 0 var(--space-6);
     display: flex;
     align-items: center;
-    background: rgba(6, 8, 15, 0.8);
+    background: var(--bg-card);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-subtle);
+}
+
+.theme-toggle {
+    margin-right: var(--space-4);
+    color: var(--text-secondary);
+    transition: all 0.2s var(--ease-out);
+}
+
+.theme-toggle:hover {
+    color: var(--text-primary);
+    background: var(--bg-glass-strong);
 }
 
 .header-spacer {

@@ -215,38 +215,88 @@ IMPORTANT: Adjust calories, macros, and food choices based on the above progress
 
 function buildCycleConstraintPrompt(cycleConstraints) {
   if (!cycleConstraints || !cycleConstraints.active) return '';
+  const safetyOverride = cycleConstraints.intensity_cap === 'recovery-only';
+  const todaySymptomsNote = cycleConstraints.today_symptoms_active
+    ? `Yes — coach logged symptoms today`
+    : `No — programming is phase-based only (no today symptoms on record)`;
+  const safetyBlock = safetyOverride ? `
+\u26d4 SAFETY OVERRIDE IS ACTIVE \u26d4
+This client has reported heavy bleeding, severe pelvic pain, or dizziness.
+Your ENTIRE weeklySchedule MUST consist ONLY of recovery sessions.
+Do NOT generate ANY resistance training, HIIT, or high-impact activity.
+Allowed: gentle walking, yoga, breathing exercises, mobility flows, stretching.
+This is a hard clinical safety constraint. Non-compliance is clinically unacceptable.
+Add a clear warning about the safety override in the top-level "warnings" array.
+` : '';
   return `
-FEMALE CYCLE CONSTRAINTS (MANDATORY — override training defaults):
-- Phase: ${cycleConstraints.phase} | Cycle Day: ${cycleConstraints.cycle_day}
+FEMALE CYCLE CONSTRAINTS (MANDATORY — deterministic, overrides all training defaults):
+- Cycle Phase: ${cycleConstraints.phase} | Cycle Day: ${cycleConstraints.cycle_day}
+- Is Menstruating TODAY: ${cycleConstraints.is_menstruating_today ? 'YES' : 'NO'}
+- Today Symptoms Active: ${todaySymptomsNote}
 - Intensity Cap: ${cycleConstraints.intensity_cap}
-- Volume Modifier: ${cycleConstraints.volume_modifier}x (reduce total volume accordingly)
+- Volume Modifier: ${cycleConstraints.volume_modifier}x (reduce total weekly volume accordingly)
 - Allowed Training Styles: [${cycleConstraints.allowed_training_styles.join(', ')}]
 - Exercise Exclusions: [${cycleConstraints.exercise_exclusions.length > 0 ? cycleConstraints.exercise_exclusions.join(', ') : 'None'}]
 - Recovery Bias: ${cycleConstraints.recovery_bias}
 - Symptom Flags: [${cycleConstraints.symptom_flags.length > 0 ? cycleConstraints.symptom_flags.join(', ') : 'None'}]
 - Adjustments Applied: [${cycleConstraints.adjustments_applied.length > 0 ? cycleConstraints.adjustments_applied.join(', ') : 'None'}]
 - Reasoning: ${cycleConstraints.reasoning}
-
-You MUST respect these constraints. Do NOT exceed the intensity cap. Do NOT include exercises from the exclusion list.
-If recovery_bias is true, generate a RECOVERY-ONLY session (yoga, walking, stretching, breathing exercises).
-Include a "cycleContext" object in your JSON output with the phase, symptom_flags, adjustments_applied, and a coach_note explaining the adaptations.`;
+${safetyBlock}
+MANDATORY COMPLIANCE RULES:
+1. Do NOT exceed the intensity cap.
+2. Do NOT include any exercise from the exclusions list.
+3. If recovery_bias is true, every session must be recovery-only (yoga, walking, stretching, breathwork).
+4. Apply the volume_modifier to ALL training days — reduce total weekly sets/volume proportionally.
+5. Include a "cycleContext" object in your JSON output: { phase, is_menstruating_today, symptom_flags, adjustments_applied, coach_note }.
+   The coach_note must explain what adaptations were made and why.`;
 }
 
-function buildFocusConstraintPrompt(focusConstraints) {
+function buildFocusConstraintPrompt(focusConstraints, cycleConstraints) {
   if (!focusConstraints || !focusConstraints.active) return '';
-  return `
-FOCUS MUSCLE / PRIORITY GOAL (DETERMINISTIC CONSTRAINTS):
-- Target Area: ${focusConstraints.focusArea}
-- Bias Level: ${focusConstraints.biasLevel}
-- Applied Rules:
-${focusConstraints.constraints.map(c => `  * ${c}`).join('\n')}
 
-MANDATORY EXECUTION:
-1. Shift weekly volume/frequency toward ${focusConstraints.focusArea} as specified.
-2. Ensure non-target muscle groups remain at ${focusConstraints.rules.othersVolumeModifier}x baseline (MAINTENANCE VOLUME).
-3. Do NOT sacrifice scientific safety or antagonistic balance.
-4. If ${focusConstraints.focusArea} is targeted, ensure it is trained at the peak of energy (beginning of sessions).`;
+  // If cycle safety override is active, suppress focus entirely.
+  // Recovery-only plans cannot apply muscle-group targeting.
+  if (cycleConstraints?.intensity_cap === 'recovery-only') {
+    return `
+TRAINING FOCUS (SUPPRESSED): A focus area was requested (${focusConstraints.focusArea}), but it has been OVERRIDDEN by the active clinical safety override.
+The cycle safety override mandates recovery-only sessions. Do NOT apply any focus bias.`;
+  }
+
+  const { focusArea, biasLevel, target_muscle_multiplier, maintenance_multiplier_others,
+    antagonist_balance_minimums, frequency_guidance, priority_exercises, constraints } = focusConstraints;
+
+  const antagonistBlock = (antagonist_balance_minimums || []).map(a =>
+    `  - ${a.muscle}: MINIMUM ${a.min_sets_per_week} sets/week (reason: ${a.reason})`
+  ).join('\n');
+
+  const priorityBlock = (priority_exercises || []).length > 0
+    ? `Priority compound lifts (MUST appear at session start): ${priority_exercises.join(', ')}`
+    : '';
+
+  return `
+TRAINING FOCUS CONSTRAINTS — MANDATORY DETERMINISTIC RULES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Target Muscle:  ${focusArea}
+Bias Level:     ${biasLevel}
+Target Volume:  ${target_muscle_multiplier}x baseline weekly sets for ${focusArea}
+Other Muscles:  ${maintenance_multiplier_others}x baseline (maintenance floor — do NOT go below)
+Frequency:      ${frequency_guidance}
+
+${priorityBlock}
+
+ANTAGONIST BALANCE MINIMUMS (non-negotiable for structural health):
+${antagonistBlock || '  None required for this focus area.'}
+
+MANDATORY RULES:
+${(constraints || []).map((c, i) => `  ${i + 1}. ${c}`).join('\n')}
+
+COMPLIANCE REQUIREMENT:
+- The plan MUST include a "focusMetadata" object in the JSON output.
+- Non-compliance with volume multipliers is clinically unacceptable.
+- Antagonist minimums are structural safety rules — violating them creates injury risk.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 }
+
 
 /**
  * Robust JSON extractor - finds the first complete JSON object in a string.
@@ -257,7 +307,7 @@ function extractJSON(text) {
   try { return JSON.parse(text.trim()); } catch { }
 
   // Strip markdown code fences
-  let cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+  let cleaned = text.replace(/```(?: json) ?\s * /gi, '').replace(/```/g, '').trim();
   try { return JSON.parse(cleaned); } catch { }
 
   // Find the first { and extract a balanced JSON object
@@ -287,13 +337,13 @@ function extractJSON(text) {
 export const geminiService = {
   async generateWorkoutPlan(client, knowledgeEntries = [], existingPlan = null, coachId = null, cycleConstraints = null, focusConstraints = null) {
     const avoidContext = existingPlan ? `
-IMPORTANT: The client already has the following plan. Generate a COMPLETELY DIFFERENT alternative — different exercises, different rep schemes, different training splits. Do NOT repeat the same exercises:
+  IMPORTANT: The client already has the following plan.Generate a COMPLETELY DIFFERENT alternative — different exercises, different rep schemes, different training splits.Do NOT repeat the same exercises:
 ${JSON.stringify(existingPlan.weeklySchedule?.map(d => ({ day: d.day, focus: d.focus, exercises: d.exercises?.map(e => e.name) })))}
-` : '';
+  ` : '';
 
     const bookContext = coachId ? await buildBookContext(coachId, client) : '';
     const cyclePrompt = buildCycleConstraintPrompt(cycleConstraints);
-    const focusPrompt = buildFocusConstraintPrompt(focusConstraints);
+    const focusPrompt = buildFocusConstraintPrompt(focusConstraints, cycleConstraints);
 
     const prompt = `${SYSTEM_PROMPT}
 ${getDrugCheckPrompt()}
@@ -310,60 +360,69 @@ ${focusPrompt}
 Generate a comprehensive, personalized WORKOUT PLAN for this client.
 
 Return your response as valid JSON with this structure:
-{
-  "summary": "Brief overview of the training philosophy",
-  "weeklySchedule": [
-    {
-      "day": "Day 1",
-      "focus": "e.g., Upper Body Push",
-      "exercises": [
+  {
+    "summary": "Brief overview of the training philosophy",
+      "weeklySchedule": [
         {
-          "name": "Exercise Name",
-          "sets": 3,
-          "reps": "8-10",
-          "rest": "90s",
-          "tempo": "3-1-2-0",
-          "notes": "Form cue or modification"
+          "day": "Day 1",
+          "focus": "e.g., Upper Body Push",
+          "exercises": [
+            {
+              "name": "Exercise Name",
+              "sets": 3,
+              "reps": "8-10",
+              "rest": "90s",
+              "tempo": "3-1-2-0",
+              "notes": "Form cue or modification"
+            }
+          ],
+          "warmup": "Warmup protocol",
+          "cooldown": "Cooldown protocol",
+          "duration": "~45 min"
         }
       ],
-      "warmup": "Warmup protocol",
-      "cooldown": "Cooldown protocol",
-      "duration": "~45 min"
-    }
-  ],
-  "cardioRecommendations": {
-    "protocol": "LISS / HIIT / MISS or combination",
-    "sessions": [
-      {
-        "type": "e.g., Incline Walking / Cycling / Rowing",
-        "duration": "30 min",
-        "intensity": "Zone 2 (60-70% MHR)",
-        "frequency": "3x/week",
-        "timing": "Post-weights or fasted AM",
-        "caloriesBurned": "~200kcal estimated"
-      }
+        "cardioRecommendations": {
+      "protocol": "LISS / HIIT / MISS or combination",
+        "sessions": [
+          {
+            "type": "e.g., Incline Walking / Cycling / Rowing",
+            "duration": "30 min",
+            "intensity": "Zone 2 (60-70% MHR)",
+            "frequency": "3x/week",
+            "timing": "Post-weights or fasted AM",
+            "caloriesBurned": "~200kcal estimated"
+          }
+        ],
+          "weeklyTarget": "Total target cardio minutes/week",
+            "fatLossRationale": "Why this cardio approach maximizes fat oxidation for this client",
+              "warnings": ["Any cardio-related precautions given their medications/conditions"]
+    },
+    "reasoning": [
+      "Reason 1: Why this split/frequency based on their profile",
+      "Reason 2: How exercises accommodate conditions/injuries",
+      "Reason 3: How this supports their goal timeline",
+      "Reason 4: Drug-exercise interaction considerations if applicable"
     ],
-    "weeklyTarget": "Total target cardio minutes/week",
-    "fatLossRationale": "Why this cardio approach maximizes fat oxidation for this client",
-    "warnings": ["Any cardio-related precautions given their medications/conditions"]
-  },
-  "reasoning": [
-    "Reason 1: Why this split/frequency based on their profile",
-    "Reason 2: How exercises accommodate conditions/injuries",
-    "Reason 3: How this supports their goal timeline",
-    "Reason 4: Drug-exercise interaction considerations if applicable"
-  ],
-  "progressionPlan": "How to progress over weeks",
-  "warnings": ["Safety considerations, drug-exercise interactions"],
-  "periodization": "Periodization approach overview"${cycleConstraints?.active ? `,
+      "progressionPlan": "How to progress over weeks",
+        "warnings": ["Safety considerations, drug-exercise interactions"],
+          "periodization": "Periodization approach overview"${cycleConstraints?.active ? `,
   "cycleContext": {
     "phase": "${cycleConstraints.phase}",
     "cycle_day": ${cycleConstraints.cycle_day},
     "symptom_flags": ${JSON.stringify(cycleConstraints.symptom_flags)},
     "adjustments_applied": ${JSON.stringify(cycleConstraints.adjustments_applied)},
     "coach_note": "Explain how the workout was adapted for the current cycle phase and symptoms"
+  }` : ''}${focusConstraints?.active && cycleConstraints?.intensity_cap !== 'recovery-only' ? `,
+  "focusMetadata": {
+    "focus_area": "${focusConstraints.focusArea}",
+    "bias_level": "${focusConstraints.biasLevel}",
+    "volume_multiplier_applied": ${focusConstraints.target_muscle_multiplier},
+    "maintenance_multiplier_others": ${focusConstraints.maintenance_multiplier_others},
+    "priority_exercises": ["List the 2-3 focus compound lifts you placed at session start"],
+    "antagonist_compliance": "Confirm antagonist balance rules were respected and how"
   }` : ''}
-}
+      }
+  }
 
 ONLY return valid JSON, no markdown formatting.`;
 
@@ -383,7 +442,7 @@ ONLY return valid JSON, no markdown formatting.`;
   async regenerateWorkoutDay(client, fullPlan, dayIndex, knowledgeEntries = [], cycleConstraints = null, focusConstraints = null) {
     const targetDay = fullPlan.weeklySchedule[dayIndex];
     const cyclePrompt = buildCycleConstraintPrompt(cycleConstraints);
-    const focusPrompt = buildFocusConstraintPrompt(focusConstraints);
+    const focusPrompt = buildFocusConstraintPrompt(focusConstraints, cycleConstraints);
     const prompt = `${SYSTEM_PROMPT}
 ${getDrugCheckPrompt()}
 
@@ -391,22 +450,22 @@ ${buildClientContext(client)}
 ${cyclePrompt}
 ${focusPrompt}
 
-The client wants ALTERNATIVE exercises for ${targetDay.day} (${targetDay.focus}).
+The client wants ALTERNATIVE exercises for ${targetDay.day}(${targetDay.focus}).
 Current exercises they want replaced: ${targetDay.exercises.map(e => e.name).join(', ')}
 
-Generate COMPLETELY DIFFERENT exercises for the same muscle groups/focus. Keep the same day structure.
-${cycleConstraints?.active ? 'IMPORTANT: You MUST respect the cycle constraints above when selecting alternative exercises.' : ''}
+Generate COMPLETELY DIFFERENT exercises for the same muscle groups / focus.Keep the same day structure.
+    ${cycleConstraints?.active ? 'IMPORTANT: You MUST respect the cycle constraints above when selecting alternative exercises.' : ''}
 ${focusConstraints?.active ? 'IMPORTANT: You MUST respect the focus constraints above when selecting alternative exercises.' : ''}
 
 Return ONLY this single day as valid JSON:
-{
-  "day": "${targetDay.day}",
-  "focus": "${targetDay.focus}",
-  "exercises": [{ "name": "...", "sets": 3, "reps": "...", "rest": "...", "tempo": "...", "notes": "..." }],
-  "warmup": "...",
-  "cooldown": "...",
-  "duration": "..."
-}
+  {
+    "day": "${targetDay.day}",
+      "focus": "${targetDay.focus}",
+        "exercises": [{ "name": "...", "sets": 3, "reps": "...", "rest": "...", "tempo": "...", "notes": "..." }],
+          "warmup": "...",
+            "cooldown": "...",
+              "duration": "..."
+  }
 
 ONLY return valid JSON, no markdown formatting.`;
 
@@ -424,9 +483,9 @@ ONLY return valid JSON, no markdown formatting.`;
 
   async generateMealPlan(client, knowledgeEntries = [], existingPlan = null, progress = null, coachId = null) {
     const avoidContext = existingPlan ? `
-IMPORTANT: The client already has the following meal plan. Generate a COMPLETELY DIFFERENT plan — different foods, different meal compositions. Do NOT repeat the same meals:
+  IMPORTANT: The client already has the following meal plan.Generate a COMPLETELY DIFFERENT plan — different foods, different meal compositions.Do NOT repeat the same meals:
 ${JSON.stringify(existingPlan.meals?.map(m => ({ name: m.name, foods: m.foods?.map(f => f.item) })))}
-` : '';
+  ` : '';
 
     const bookContext = coachId ? await buildBookContext(coachId, client) : '';
 
@@ -443,51 +502,81 @@ ${avoidContext}
 ${buildProgressContext(progress)}
 
 Generate a comprehensive, personalized MEAL PLAN for this client.
-CRITICAL: Use foods actually available in ${client.questionnaire?.country || 'their region'}. ${client.questionnaire?.cuisinePreference ? `The client prefers ${client.questionnaire.cuisinePreference} cuisine.` : ''}
+    CRITICAL: Use foods actually available in ${client.questionnaire?.country || 'their region'}. ${client.questionnaire?.cuisinePreference ? `The client prefers ${client.questionnaire.cuisinePreference} cuisine.` : ''}
+
+For EVERY meal slot, you MUST provide TWO distinct options so the client can choose based on convenience and preference:
+- Option 1: A completely VEGETARIAN/PLANT-BASED option.
+- Option 2: A NON-VEGETARIAN option containing meat/poultry/fish/eggs.
+Both options MUST have roughly the same total calories and macronutrient breakdown so they are perfectly swappable. Provide precise equivalents (e.g., if Option 1 has 150g tofu, Option 2 might have 100g chicken).
+
+Provide a detailed AI REASONING block explaining your calculations and knowledge utilization:
+- "macroCalculations": How you distributed calories and macros across meals.
+- "knowledgeBaseUtilization": Which provided knowledge rules were applied and why.
+- "externalKnowledgeUsed": Any rules applied from outside the provided knowledge base.
 
 Apply food mechanics principles:
-- Nutrient pairing for optimal absorption (iron + vitamin C, fat-soluble vitamins with fats)
-- Anti-nutrient awareness (phytates, oxalates, lectins)
-- Meal timing relative to training
-- Glycemic load management
-- Gut health considerations
-- Drug-food interaction avoidance (CHECK MEDICATIONS CAREFULLY)
+  - Nutrient pairing for optimal absorption(iron + vitamin C, fat - soluble vitamins with fats)
+    - Anti - nutrient awareness(phytates, oxalates, lectins)
+      - Meal timing relative to training
+        - Glycemic load management
+          - Gut health considerations
+            - Drug - food interaction avoidance(CHECK MEDICATIONS CAREFULLY)
 
 Return your response as valid JSON with this structure:
-{
-  "summary": "Brief overview of the nutritional approach",
-  "dailyTargets": { "calories": 2200, "protein": "160g", "carbs": "220g", "fat": "75g", "fiber": "30g" },
-  "meals": [
-    {
-      "name": "Meal 1 - Pre-Workout Breakfast",
-      "time": "7:00 AM",
-      "foods": [
-        { "item": "Food item (use regional names)", "amount": "200g", "calories": 250, "protein": 20, "carbs": 30, "fat": 5 }
+  {
+    "summary": "Brief overview of the nutritional approach",
+      "dailyTargets": { "calories": 2200, "protein": "160g", "carbs": "220g", "fat": "75g", "fiber": "30g" },
+    "meals": [
+      {
+        "name": "Meal 1 - Pre-Workout Breakfast",
+        "time": "7:00 AM",
+        "options": [
+          {
+            "optionName": "Option 1 (Vegetarian)",
+            "foods": [
+              { "item": "Food item (use regional names)", "amount": "200g", "calories": 250, "protein": 20, "carbs": 30, "fat": 5 }
+            ],
+            "foodMechanics": "Why these foods are paired",
+            "totalCalories": 450
+          },
+          {
+            "optionName": "Option 2 (Non-Veg/Meat)",
+            "foods": [
+              { "item": "Equivalent food item", "amount": "100g", "calories": 250, "protein": 20, "carbs": 30, "fat": 5 }
+            ],
+            "foodMechanics": "Why these foods are paired",
+            "totalCalories": 450
+          }
+        ]
+      }
+    ],
+      "drugNutrientWarnings": [
+        {
+          "medication": "Drug name",
+          "interaction": "What interacts",
+          "action": "How the plan avoids this",
+          "severity": "HIGH/MEDIUM/LOW"
+        }
       ],
-      "foodMechanics": "Why these foods are paired (absorption, timing, drug interactions avoided)",
-      "totalCalories": 450
+        "reasoning": [
+          "Reason 1: Caloric target rationale based on goals and metabolism",
+          "Reason 2: Macro distribution for their condition",
+          "Reason 3: Regional food choices and why",
+          "Reason 4: Drug-nutrient interaction management"
+        ],
+          "supplements": [
+            { "name": "Supplement", "dosage": "Amount", "timing": "When", "reason": "Why — cite mechanism" }
+          ],
+            "warnings": [
+        "Use real foods, not just protein powder"
+      ],
+      "aiReasoning": {
+        "macroCalculations": "Detailed explanation of macro distribution",
+        "knowledgeBaseUtilization": "Explanation of how conditions (e.g. Pre-diabetes) influenced the plan",
+        "externalKnowledgeUsed": "Explanation of any external science applied"
+      },
+      "summary": "High level strategy overview."
     }
-  ],
-  "drugNutrientWarnings": [
-    {
-      "medication": "Drug name",
-      "interaction": "What interacts",
-      "action": "How the plan avoids this",
-      "severity": "HIGH/MEDIUM/LOW"
-    }
-  ],
-  "reasoning": [
-    "Reason 1: Caloric target rationale based on goals and metabolism",
-    "Reason 2: Macro distribution for their condition",
-    "Reason 3: Regional food choices and why",
-    "Reason 4: Drug-nutrient interaction management"
-  ],
-  "supplements": [
-    { "name": "Supplement", "dosage": "Amount", "timing": "When", "reason": "Why — cite mechanism" }
-  ],
-  "warnings": ["Dietary considerations or allergen notes"],
-  "hydration": "Daily water and hydration recommendations"
-}
 
 ONLY return valid JSON, no markdown formatting.`;
 
@@ -497,8 +586,7 @@ ONLY return valid JSON, no markdown formatting.`;
     const { text, usage } = await callWithRetry(prompt);
     usageTracker.log('generateMealPlan', usage);
     try {
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
+      return extractJSON(text);
     } catch {
       return { raw: text, parseError: true };
     }
@@ -516,16 +604,31 @@ Current foods they want replaced: ${targetMeal.foods.map(f => f.item).join(', ')
 Daily targets: ${JSON.stringify(fullPlan.dailyTargets)}
 This meal should be approximately ${targetMeal.totalCalories} calories.
 
-CRITICAL: Use foods from ${client.questionnaire?.country || 'their region'}. Check drug interactions with medications: ${client.questionnaire?.medications || 'None'}.
+    CRITICAL: Use foods from ${client.questionnaire?.country || 'their region'}. Check drug interactions with medications: ${client.questionnaire?.medications || 'None'}.
+
+Provide TWO alternative options for this meal slot that match the original calorie/macro goals:
+- Option 1: Vegetarian
+- Option 2: Non-Vegetarian
 
 Return ONLY this single meal as valid JSON:
-{
-  "name": "${targetMeal.name}",
-  "time": "${targetMeal.time}",
-  "foods": [{ "item": "...", "amount": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }],
-  "foodMechanics": "...",
-  "totalCalories": 0
-}
+  {
+    "name": "${targetMeal.name}",
+    "time": "${targetMeal.time}",
+    "options": [
+      {
+        "optionName": "Option 1 (Vegetarian)",
+        "foods": [{ "item": "...", "amount": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }],
+        "foodMechanics": "...",
+        "totalCalories": 0
+      },
+      {
+        "optionName": "Option 2 (Non-Veg)",
+        "foods": [{ "item": "...", "amount": "...", "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }],
+        "foodMechanics": "...",
+        "totalCalories": 0
+      }
+    ]
+  }
 
 ONLY return valid JSON, no markdown formatting.`;
 
@@ -535,8 +638,7 @@ ONLY return valid JSON, no markdown formatting.`;
     const { text, usage } = await callWithRetry(prompt);
     usageTracker.log('regenerateSingleMeal', usage);
     try {
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
+      return extractJSON(text);
     } catch {
       return null;
     }
@@ -558,8 +660,8 @@ ONLY return valid JSON, no markdown formatting.`;
       'Country: ' + (q.country || 'N/A') + ' | Diet: ' + (q.dietType || 'N/A') + progressLine + '\n\n' +
       'COACH-SELECTED INGREDIENTS:\n' + foodList + '\n\n' +
       'TOTALS: ' + macroTotals.calories + 'kcal | P:' + macroTotals.protein + 'g | C:' + macroTotals.carbs + 'g | F:' + macroTotals.fat + 'g\n\n' +
-      'TASKS:\n1. Distribute into 3-5 meals with timing\n2. Flag drug-food interactions\n3. Suggest 2-3 additions for gaps\n4. Apply food pairing rules\n5. Note condition conflicts\n\n' +
-      'Return valid JSON:\n{"meals":[{"name":"Meal 1","time":"7:00 AM","foods":[{"item":"...","amount":"...","calories":0,"protein":0,"carbs":0,"fat":0}],"foodMechanics":"...","totalCalories":0}],"dailyTargets":{"calories":0,"protein":"0g","carbs":"0g","fat":"0g","fiber":"0g"},"suggestedAdditions":[{"item":"Food","amount":"...","reason":"Why"}],"drugNutrientWarnings":[{"medication":"...","interaction":"...","action":"...","severity":"HIGH/MEDIUM/LOW"}],"warnings":["..."],"summary":"Brief summary"}\nONLY return valid JSON.';
+      'TASKS:\n1. Distribute into 3-5 meals with timing\n2. Flag drug-food interactions\n3. Suggest 2-3 additions for gaps\n4. Apply food pairing rules\n5. Note condition conflicts\n6. For each meal slot, define the coach-selected ingredients as Option 1. Create a logical Option 2 (e.g. Vegetarian if Option 1 is meat, or vice versa) with equivalent macros.\n\n' +
+      'Return valid JSON:\n{"meals":[{"name":"Meal 1","time":"7:00 AM","options":[{"optionName":"Option 1","foods":[{"item":"...","amount":"...","calories":0,"protein":0,"carbs":0,"fat":0}],"foodMechanics":"...","totalCalories":0},{"optionName":"Option 2","foods":[{"item":"...","amount":"...","calories":0,"protein":0,"carbs":0,"fat":0}],"foodMechanics":"...","totalCalories":0}]}],"dailyTargets":{"calories":0,"protein":"0g","carbs":"0g","fat":"0g","fiber":"0g"},"suggestedAdditions":[{"item":"Food","amount":"...","reason":"Why"}],"drugNutrientWarnings":[{"medication":"...","interaction":"...","action":"...","severity":"HIGH/MEDIUM/LOW"}],"warnings":["..."],"aiReasoning":{"macroCalculations":"...","knowledgeBaseUtilization":"...","externalKnowledgeUsed":"..."},"summary":"Brief summary"}\nONLY return valid JSON.';
 
     const quota = usageTracker.checkQuota();
     if (!quota.allowed) throw new Error(quota.reason);
@@ -567,8 +669,7 @@ ONLY return valid JSON, no markdown formatting.`;
     const { text, usage } = await callWithRetry(prompt);
     usageTracker.log('generateMealFromIngredients', usage);
     try {
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
+      return extractJSON(text);
     } catch {
       return { raw: text, parseError: true };
     }

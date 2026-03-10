@@ -1,18 +1,43 @@
 // ═══════════════════════════════════════════════════════
-// ShadowFitness — Cycle Constraint Engine
-// Deterministic workout constraints based on menstrual cycle phase
-// Inserted between TierGuard and KnowledgeStore in the pipeline
+// ShadowFitness — Cycle Constraint Engine v2
+// Deterministic workout constraints based on menstrual cycle phase.
+// Inserted between TierGuard and KnowledgeStore in the pipeline.
+//
+// Key architecture (v2):
+//   cycle_baseline — persisted baseline data (last period, lengths)
+//   cycle_today    — time-scoped symptom log (only valid if recorded_at === today)
+//   Symptoms NEVER influence programming unless recorded_at matches today.
 // ═══════════════════════════════════════════════════════
 
+const TODAY_STR = () => new Date().toISOString().split('T')[0];
+
+// ─── Helpers ──────────────────────────────────────────
+function parseIntSafe(val, fallback) {
+    const n = parseInt(val);
+    return isNaN(n) ? fallback : n;
+}
+
+// ─── CycleStatusResolver ──────────────────────────────
 /**
- * Compute the current cycle phase from date-based inputs.
- * @param {string} lastPeriodDate - ISO date string (YYYY-MM-DD)
- * @param {number} periodDuration - Days the period typically lasts (3–7)
- * @param {number} cycleLength - Total cycle length in days (21–35, default 28)
- * @returns {{ phase: string, cycleDay: number }}
+ * Deterministic resolver: computes whether client is menstruating today,
+ * plus the current cycle phase. Reads both new (cycle_baseline) and
+ * legacy (flat) questionnaire fields.
+ *
+ * @param {Object} questionnaire - Client questionnaire data
+ * @returns {{ is_menstruating_today: boolean, cycle_phase: string, cycle_day: number }}
  */
-export function detectCyclePhase(lastPeriodDate, periodDuration = 5, cycleLength = 28) {
-    if (!lastPeriodDate) return { phase: 'unknown', cycleDay: 0 };
+export function resolveCycleStatus(questionnaire) {
+    const q = questionnaire || {};
+    const baseline = q.cycle_baseline || {};
+
+    // Support both new nested and legacy flat field names
+    const lastPeriodDate = baseline.last_period_start_date || q.last_period_date;
+    const periodDuration = parseIntSafe(baseline.typical_period_duration_days ?? q.period_duration, 5);
+    const cycleLength = parseIntSafe(baseline.typical_cycle_length_days ?? q.cycle_length, 28);
+
+    if (!lastPeriodDate) {
+        return { is_menstruating_today: false, cycle_phase: 'unknown', cycle_day: 0 };
+    }
 
     const start = new Date(lastPeriodDate);
     const today = new Date();
@@ -20,30 +45,41 @@ export function detectCyclePhase(lastPeriodDate, periodDuration = 5, cycleLength
     today.setHours(0, 0, 0, 0);
 
     const diffMs = today - start;
-    if (diffMs < 0) return { phase: 'unknown', cycleDay: 0 };
-
-    const daysSinceStart = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const cycleDay = (daysSinceStart % cycleLength) + 1;
-
-    // Phase mapping based on standard physiology
-    const pd = Math.max(3, Math.min(7, periodDuration));
-    const ovulationStart = Math.round(cycleLength * 0.5) - 1; // ~Day 13 for 28-day cycle
-    const ovulationEnd = ovulationStart + 2;                    // ~Day 15
-
-    if (cycleDay <= pd) {
-        return { phase: 'menstrual', cycleDay };
-    } else if (cycleDay <= ovulationStart) {
-        return { phase: 'follicular', cycleDay };
-    } else if (cycleDay <= ovulationEnd) {
-        return { phase: 'ovulatory', cycleDay };
-    } else {
-        return { phase: 'luteal', cycleDay };
+    if (diffMs < 0) {
+        return { is_menstruating_today: false, cycle_phase: 'unknown', cycle_day: 0 };
     }
+
+    const daysSince = Math.floor(diffMs / 86400000);
+    const pd = Math.max(3, Math.min(7, periodDuration));
+    const cl = Math.max(21, Math.min(45, cycleLength));
+    const cycleDay = (daysSince % cl) + 1;
+
+    // Deterministic menstruation check: only within [day 1 .. period_duration]
+    const is_menstruating_today = cycleDay <= pd;
+
+    // Phase detection
+    const ovulationStart = Math.round(cl * 0.5) - 1; // ~Day 13 for 28-day cycle
+    const ovulationEnd = ovulationStart + 2;           // ~Day 15
+    let cycle_phase;
+    if (cycleDay <= pd) cycle_phase = 'menstrual';
+    else if (cycleDay <= ovulationStart) cycle_phase = 'follicular';
+    else if (cycleDay <= ovulationEnd) cycle_phase = 'ovulatory';
+    else cycle_phase = 'luteal';
+
+    return { is_menstruating_today, cycle_phase, cycle_day: cycleDay };
 }
 
-/**
- * Phase-specific constraint templates
- */
+// Retained for backward compat with any direct callers (WorkoutBuilderPage uses this indirectly)
+export function detectCyclePhase(lastPeriodDate, periodDuration = 5, cycleLength = 28) {
+    const { cycle_phase: phase, cycle_day: cycleDay } = resolveCycleStatus({
+        last_period_date: lastPeriodDate,
+        period_duration: periodDuration,
+        cycle_length: cycleLength,
+    });
+    return { phase, cycleDay };
+}
+
+// ─── Phase Constraint Templates ───────────────────────
 const PHASE_CONSTRAINTS = {
     menstrual: {
         intensity_cap: 'low-moderate',
@@ -95,34 +131,36 @@ const PHASE_REASONING = {
     unknown: 'Cycle phase unknown — applying conservative, moderate-intensity defaults to accommodate potential hormonal fluctuations.',
 };
 
+// ─── Main Constraint Computer ─────────────────────────
 /**
  * Compute full cycle constraints for a client.
- * Returns null for non-female clients (pass-through).
+ * Returns null for non-female clients or clients without cycle tracking (pass-through).
+ *
+ * v2 change: cycle_today symptoms are ONLY applied if cycle_today.recorded_at === today's date
+ * AND is_menstruating_today is true. Legacy flat symptom fields are ignored.
  *
  * @param {Object} questionnaire - Client questionnaire data
  * @param {string} tierLevel - 'free' | 'pro' | 'clinic' | 'admin'
- * @returns {Object|null} Cycle constraints object or null
+ * @returns {Object|null}
  */
 export function computeCycleConstraints(questionnaire, tierLevel = 'free') {
     const q = questionnaire || {};
 
     // Gate: only activates for female clients with tracking enabled
+    // Support both new nested and legacy flat field
+    const trackingEnabled = q.cycle_baseline?.tracking_enabled ?? q.cycle_tracking_enabled;
     if (!q.sex || q.sex.toLowerCase() !== 'female') return null;
-    if (!q.cycle_tracking_enabled) return null;
+    if (!trackingEnabled) return null;
 
-    // Detect phase from date-based inputs
-    const { phase, cycleDay } = detectCyclePhase(
-        q.last_period_date,
-        parseInt(q.period_duration || 5) || 5,
-        parseInt(q.cycle_length || 28) || 28
-    );
+    // ── Resolve current cycle status deterministically ──
+    const { is_menstruating_today, cycle_phase: phase, cycle_day: cycleDay } = resolveCycleStatus(q);
 
-    // Start with phase template
     const template = PHASE_CONSTRAINTS[phase] || PHASE_CONSTRAINTS.unknown;
     const constraints = {
         active: true,
         phase,
         cycle_day: cycleDay,
+        is_menstruating_today,
         intensity_cap: template.intensity_cap,
         volume_modifier: template.volume_modifier,
         allowed_training_styles: [...template.allowed_training_styles],
@@ -132,13 +170,35 @@ export function computeCycleConstraints(questionnaire, tierLevel = 'free') {
         symptom_flags: [],
         adjustments_applied: [],
         reasoning: PHASE_REASONING[phase] || PHASE_REASONING.unknown,
+        today_symptoms_active: false, // new field: were today's symptoms applied?
     };
 
-    // ── Symptom overrides ──
-    const symptoms = q.cycle_symptoms || {};
-    const isFull = tierLevel !== 'free'; // Pro/Clinic/Admin get full analysis
+    // ── CRITICAL: Only apply symptoms if explicitly logged TODAY and client is menstruating ──
+    const todayStr = TODAY_STR();
+    const cycleToday = q.cycle_today || {};
+    const todayValid = cycleToday.recorded_at === todayStr && cycleToday.is_menstruating_today === true;
 
-    // Check high-severity symptoms
+    const symptoms = todayValid ? (cycleToday.symptoms || {}) : {};
+    const flags = todayValid ? (cycleToday.safety_flags || {}) : {};
+
+    if (todayValid) {
+        constraints.today_symptoms_active = true;
+    }
+
+    // If not menstruating today: skip ALL symptom processing
+    // Phase constraints (follicular, luteal, etc.) are still applied above
+    if (!is_menstruating_today) {
+        // Luteal-specific light guardrail (heat/fatigue management — no symptom required)
+        if (phase === 'luteal') {
+            constraints.adjustments_applied.push('luteal_heat_management');
+        }
+        constraints.volume_modifier = Math.max(0.3, Math.min(1.15, Math.round(constraints.volume_modifier * 100) / 100));
+        return constraints;
+    }
+
+    // ── Symptom overrides (only reached if menstruating today with valid cycle_today) ──
+    const isFull = tierLevel !== 'free';
+
     if (symptoms.cramps >= 2) {
         constraints.symptom_flags.push('cramps');
         constraints.adjustments_applied.push('cramp_reduction');
@@ -156,13 +216,6 @@ export function computeCycleConstraints(questionnaire, tierLevel = 'free') {
         if (constraints.intensity_cap === 'peak' || constraints.intensity_cap === 'high') {
             constraints.intensity_cap = 'moderate';
             constraints.adjustments_applied.push('intensity_capped');
-        }
-        if (isFull && phase === 'luteal') {
-            // Remove glycolytic HIIT in luteal with fatigue
-            constraints.exercise_exclusions.push('Sprint Intervals', 'Tabata', 'EMOM Circuits');
-            constraints.allowed_training_styles = constraints.allowed_training_styles.filter(
-                s => !['HIIT', 'CrossFit'].includes(s)
-            );
         }
     }
 
@@ -185,12 +238,9 @@ export function computeCycleConstraints(questionnaire, tierLevel = 'free') {
 
     if (symptoms.mood_changes >= 2) {
         constraints.symptom_flags.push('mood_changes');
-        if (isFull) {
+        if (isFull && !constraints.allowed_training_styles.includes('Yoga')) {
             constraints.adjustments_applied.push('mood_support');
-            // Encourage endorphin-boosting activities
-            if (!constraints.allowed_training_styles.includes('Yoga')) {
-                constraints.allowed_training_styles.push('Yoga');
-            }
+            constraints.allowed_training_styles.push('Yoga');
         }
     }
 
@@ -202,8 +252,7 @@ export function computeCycleConstraints(questionnaire, tierLevel = 'free') {
         }
     }
 
-    // ── Contra-flag override (highest priority) ──
-    const flags = q.cycle_contra_flags || {};
+    // ── Contra-flag SAFETY OVERRIDE (highest priority) ──
     if (flags.heavy_bleeding || flags.severe_pelvic_pain || flags.dizziness) {
         constraints.intensity_cap = 'recovery-only';
         constraints.volume_modifier = 0.4;
@@ -212,7 +261,6 @@ export function computeCycleConstraints(questionnaire, tierLevel = 'free') {
         constraints.exercise_exclusions = ['ALL resistance training', 'ALL high-impact', 'ALL HIIT'];
         constraints.adjustments_applied = ['recovery_only_session'];
         constraints.reasoning = 'SAFETY OVERRIDE: Contra-indications detected (heavy bleeding / severe pelvic pain / dizziness). Session restricted to recovery-only protocols. Advise medical consultation.';
-
         if (flags.heavy_bleeding) constraints.symptom_flags.push('heavy_bleeding');
         if (flags.severe_pelvic_pain) constraints.symptom_flags.push('severe_pelvic_pain');
         if (flags.dizziness) constraints.symptom_flags.push('dizziness');
@@ -225,15 +273,11 @@ export function computeCycleConstraints(questionnaire, tierLevel = 'free') {
         constraints.reasoning = `${phase.charAt(0).toUpperCase() + phase.slice(1)} phase (Day ${cycleDay}). Intensity and volume adjusted.`;
     }
 
-    // Ensure volume modifier stays reasonable
     constraints.volume_modifier = Math.max(0.3, Math.min(1.15, Math.round(constraints.volume_modifier * 100) / 100));
-
     return constraints;
 }
 
-/**
- * Phase color mapping for UI
- */
+// ─── Phase Color Map (UI) ─────────────────────────────
 export const PHASE_COLORS = {
     menstrual: { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.4)', text: '#ef4444', label: 'Menstrual Phase', icon: '🔴' },
     follicular: { bg: 'rgba(34, 197, 94, 0.15)', border: 'rgba(34, 197, 94, 0.4)', text: '#22c55e', label: 'Follicular Phase', icon: '🟢' },

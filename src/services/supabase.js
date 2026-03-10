@@ -16,7 +16,8 @@ export const getIsDemoMode = () => {
 };
 
 // Demo mode storage (in-memory)
-const demoStore = {
+// Demo mode storage with localStorage persistence
+const DEFAULT_DEMO_STORE = {
   clients: [
     {
       id: 'demo-client-male-1',
@@ -43,14 +44,12 @@ const demoStore = {
         country: 'India', cuisinePreference: 'South Indian',
         primaryGoal: 'Fat Loss', secondaryGoals: ['Toning', 'Flexibility'], targetWeight: '54kg', timeline: '8 weeks',
         conditions: ['PCOS'], medications: 'Metformin 500mg, Vitamin D', injuries: '', surgeries: '',
-        // Cycle tracking — menstrual phase with symptoms
         cycle_tracking_enabled: true,
-        last_period_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 2 days ago = menstrual phase
+        last_period_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         period_duration: '5',
         cycle_length: '30',
         cycle_symptoms: { cramps: 2, fatigue: 2, bloating: 1, headache: 0, mood_changes: 1, sleep_disruption: 1 },
         cycle_contra_flags: { heavy_bleeding: false, severe_pelvic_pain: false, dizziness: false },
-        // Lifestyle
         sleepHours: '6-7', stressLevel: '6', occupation: 'Sedentary (desk)', activityLevel: 'Beginner',
         dietType: 'Vegetarian', allergies: ['Peanuts'], intolerances: ['Lactose'], eatingSchedule: '3 meals', digestionIssues: 'Occasional bloating',
         experienceLevel: 'Beginner', equipment: ['Dumbbells', 'Resistance Bands', 'Yoga Mat'], daysPerWeek: '4', timePerSession: '45 min', preferredStyles: ['Yoga', 'Strength Training'],
@@ -67,14 +66,12 @@ const demoStore = {
         country: 'India', cuisinePreference: 'Mediterranean',
         primaryGoal: 'Strength', secondaryGoals: ['Muscle Building'], targetWeight: '63kg', timeline: '16 weeks',
         conditions: [], medications: 'Multivitamin, Fish Oil', injuries: 'Mild lower back pain', surgeries: '',
-        // Cycle tracking — follicular phase, with contra flag for safety testing
         cycle_tracking_enabled: true,
-        last_period_date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 10 days ago = follicular phase
+        last_period_date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         period_duration: '4',
         cycle_length: '28',
         cycle_symptoms: { cramps: 0, fatigue: 0, bloating: 0, headache: 0, mood_changes: 0, sleep_disruption: 0 },
         cycle_contra_flags: { heavy_bleeding: false, severe_pelvic_pain: false, dizziness: false },
-        // Lifestyle
         sleepHours: '7-8', stressLevel: '3', occupation: 'Moderately Active', activityLevel: 'Intermediate',
         dietType: 'Non-Vegetarian', allergies: [], intolerances: [], eatingSchedule: '4 meals', digestionIssues: '',
         experienceLevel: 'Intermediate', equipment: ['Full Gym'], daysPerWeek: '5', timePerSession: '60 min', preferredStyles: ['Powerlifting', 'Strength Training'],
@@ -101,7 +98,24 @@ const demoStore = {
   ],
   workoutPlans: [],
   mealPlans: [],
-  documents: []
+  documents: [],
+  knowledgeEntries: []
+};
+
+const loadDemoStore = () => {
+  try {
+    const saved = localStorage.getItem('shadow_fitness_demo_store');
+    if (saved) return JSON.parse(saved);
+  } catch (e) { console.error('Error loading demo store', e); }
+  return DEFAULT_DEMO_STORE;
+};
+
+const demoStore = loadDemoStore();
+
+const saveDemoStore = () => {
+  try {
+    localStorage.setItem('shadow_fitness_demo_store', JSON.stringify(demoStore));
+  } catch (e) { console.error('Error saving demo store', e); }
 };
 
 // Auth helpers
@@ -177,6 +191,7 @@ export const clientService = {
         updated_at: new Date().toISOString()
       };
       demoStore.clients.unshift(newClient);
+      saveDemoStore();
       return newClient;
     }
     const { data, error } = await supabase.from('clients').insert({
@@ -189,7 +204,10 @@ export const clientService = {
   async update(id, updates) {
     if (getIsDemoMode()) {
       const idx = demoStore.clients.findIndex(c => c.id === id);
-      if (idx >= 0) demoStore.clients[idx] = { ...demoStore.clients[idx], ...updates };
+      if (idx >= 0) {
+        demoStore.clients[idx] = { ...demoStore.clients[idx], ...updates, updated_at: new Date().toISOString() };
+        saveDemoStore();
+      }
       return demoStore.clients[idx];
     }
     const { data, error } = await supabase.from('clients')
@@ -199,7 +217,11 @@ export const clientService = {
   },
 
   async delete(id) {
-    if (getIsDemoMode()) { demoStore.clients = demoStore.clients.filter(c => c.id !== id); return; }
+    if (getIsDemoMode()) {
+      demoStore.clients = demoStore.clients.filter(c => c.id !== id);
+      saveDemoStore();
+      return;
+    }
     const { error } = await supabase.from('clients').delete().eq('id', id);
     if (error) throw error;
   }
@@ -208,7 +230,7 @@ export const clientService = {
 // Knowledge entries
 export const knowledgeService = {
   async getAll(coachId) {
-    if (getIsDemoMode()) return [];
+    if (getIsDemoMode()) return demoStore.knowledgeEntries || [];
     const { data, error } = await supabase.from('knowledge_entries').select('*')
       .or(`coach_id.eq.${coachId},is_custom.eq.false`).order('category', { ascending: true });
     if (error) throw error;
@@ -216,7 +238,13 @@ export const knowledgeService = {
   },
 
   async search(coachId, query) {
-    if (getIsDemoMode()) return [];
+    if (getIsDemoMode()) {
+      const q = query.toLowerCase();
+      return (demoStore.knowledgeEntries || []).filter(e =>
+        e.topic.toLowerCase().includes(q) ||
+        e.content.toLowerCase().includes(q)
+      );
+    }
     const { data, error } = await supabase.from('knowledge_entries').select('*')
       .or(`coach_id.eq.${coachId},is_custom.eq.false`)
       .or(`topic.ilike.%${query}%,content.ilike.%${query}%,tags.cs.{${query}}`);
@@ -225,7 +253,13 @@ export const knowledgeService = {
   },
 
   async create(entry) {
-    if (getIsDemoMode()) return entry;
+    if (getIsDemoMode()) {
+      const newEntry = { ...entry, id: 'ke-' + Date.now(), created_at: new Date().toISOString() };
+      if (!demoStore.knowledgeEntries) demoStore.knowledgeEntries = [];
+      demoStore.knowledgeEntries.push(newEntry);
+      saveDemoStore();
+      return newEntry;
+    }
     const { data, error } = await supabase.from('knowledge_entries').insert(entry).select().single();
     if (error) throw error;
     return data;
@@ -248,7 +282,12 @@ export const workoutService = {
     return data;
   },
   async save(plan) {
-    if (getIsDemoMode()) { demoStore.workoutPlans.push(plan); return plan; }
+    if (getIsDemoMode()) {
+      const newPlan = { ...plan, id: 'wp-' + Date.now(), created_at: new Date().toISOString() };
+      demoStore.workoutPlans.push(newPlan);
+      saveDemoStore();
+      return newPlan;
+    }
     const { data, error = null } = await supabase.from('workout_plans').insert(plan).select().single();
     if (error) throw error;
     return data;
@@ -259,6 +298,26 @@ export const workoutService = {
       .select('*').eq('client_id', clientId).order('created_at', { ascending: false });
     if (error) throw error;
     return data;
+  },
+
+  async archive(planId) {
+    if (getIsDemoMode()) {
+      const idx = (demoStore.workoutPlans || []).findIndex(p => p.id === planId);
+      if (idx >= 0) {
+        demoStore.workoutPlans[idx] = { ...demoStore.workoutPlans[idx], status: 'archived' };
+        saveDemoStore();
+      }
+      return;
+    }
+    const { error } = await supabase.from('workout_plans')
+      .update({ status: 'archived' }).eq('id', planId);
+    if (error) throw error;
+  },
+
+  duplicate(planRecord) {
+    // Returns a plain plan_json object ready to be used as a Draft (no DB row created)
+    const { plan_json } = planRecord;
+    return plan_json || planRecord;
   }
 };
 
@@ -272,10 +331,39 @@ export const mealService = {
     return data;
   },
   async save(plan) {
-    if (getIsDemoMode()) { demoStore.mealPlans.push(plan); return plan; }
+    if (getIsDemoMode()) {
+      const newPlan = { ...plan, id: 'mp-' + Date.now(), created_at: new Date().toISOString() };
+      demoStore.mealPlans.push(newPlan);
+      saveDemoStore();
+      return newPlan;
+    }
     const { data, error } = await supabase.from('meal_plans').insert(plan).select().single();
     if (error) throw error;
     return data;
+  },
+  async getByClientId(clientId) {
+    if (getIsDemoMode()) return (demoStore.mealPlans || []).filter(p => (p.client_id === clientId || p.clientId === clientId));
+    const { data, error } = await supabase.from('meal_plans')
+      .select('*').eq('client_id', clientId).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+  async archive(planId) {
+    if (getIsDemoMode()) {
+      const idx = (demoStore.mealPlans || []).findIndex(p => p.id === planId);
+      if (idx >= 0) {
+        demoStore.mealPlans[idx] = { ...demoStore.mealPlans[idx], status: 'archived' };
+        saveDemoStore();
+      }
+      return;
+    }
+    const { error } = await supabase.from('meal_plans')
+      .update({ status: 'archived' }).eq('id', planId);
+    if (error) throw error;
+  },
+  duplicate(planRecord) {
+    const { plan_json } = planRecord;
+    return plan_json || planRecord;
   }
 };
 

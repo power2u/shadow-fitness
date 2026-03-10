@@ -1,0 +1,50 @@
+﻿------------------------------------------------------------------
+SHADOWFITNESS CYCLE PRECEDENCE VERIFICATION
+------------------------------------------------------------------
+
+SCENARIO: MALE CLIENT (Control)
+- Phase: N/A
+- Focus Requested: Aggressive Chest (2x)
+- [RESOLVED] Multiplier: 2x
+- [RESOLVED] Bias Level: Aggressive
+- Conflict: NO
+- Log: No active cycle constraints. Passing focus through.
+
+SCENARIO: FEMALE FOLLICULAR (Full Bias)
+- Phase: follicular
+- Focus Requested: Aggressive Legs (2x)
+- [RESOLVED] Multiplier: 2x
+- [RESOLVED] Bias Level: Aggressive
+- Conflict: NO
+- Log: Follicular window: Full focus bias allowed.
+
+SCENARIO: FEMALE LUTEAL + AGGRESSIVE (Precedence Check)
+- Phase: luteal
+- Focus Requested: Aggressive Back (2x)
+- [RESOLVED] Multiplier: 1.5x
+- [RESOLVED] Bias Level: Moderate (Capped by Luteal)
+- Conflict: YES Γ£à
+- Reason: Luteal phase detected. Downgrading Aggressive focus to Moderate for safety.
+- Log: Downgraded focus from Aggressive to Moderate due to Luteal phase.
+
+SCENARIO: FEMALE MENSTRUAL + FOCUS (Cap Check)
+- Phase: menstrual
+- Focus Requested: Mild Arms (1.25x)
+- [RESOLVED] Multiplier: 0.65x
+- [RESOLVED] Bias Level: Capped (Menstrual)
+- Conflict: YES Γ£à
+- Reason: Menstrual phase cap (0.65x) applied. Downgrading Mild focus.
+- Log: Capped focus multiplier from 1.25 to 0.65 due to Menstrual Phase.
+
+SCENARIO: SAFETY OVERRIDE (Dizziness/Bleeding)
+- Phase: menstrual
+- Focus Requested: Moderate Glutes (1.5x)
+- [RESOLVED] Multiplier: 0x
+- [RESOLVED] Bias Level: NONE
+- Conflict: YES Γ£à
+- Reason: Clinical Safety Override: Reporting severe symptoms. Focus suppressed.
+- Log: Safety Override active. SUPPRESSING all focus constraints.
+
+------------------------------------------------------------------
+VERIFICATION COMPLETE: Deterministic Precedence Enforced.
+------------------------------------------------------------------

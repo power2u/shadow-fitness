@@ -24,6 +24,46 @@ Food Mechanics: Resistant starch (cooled potatoes, rice) acts as prebiotic and r
     },
     {
         category: 'conditions',
+        topic: 'Pre-diabetes — Clinical Management',
+        content: `Exercise: 150 min/week of moderate-to-vigorous aerobic activity + 2-3 sessions of resistance training. Focus on large muscle groups (legs, back) to maximize glucose disposal. Post-meal walking (10-15 min) significantly reduces postprandial glucose.
+Nutrition: "Carbohydrate Sequencing" — eat fiber (vegetables) first, then protein/fats, and carbs last. This reduces insulin spike by up to 75%. Emphasize magnesium-rich foods. Limit refined sugars and processed flours. High fiber (35g+) is critical for improving insulin sensitivity.`,
+        sources: ['DPP Research Group - Diabetes Prevention Program 10-year follow-up', 'Lancet 2019 - Carbohydrate Quality and Human Health'],
+        tags: ['pre-diabetes', 'insulin', 'blood-sugar'],
+        is_custom: false
+    },
+    {
+        category: 'conditions',
+        topic: 'Hashimoto\'s Thyroiditis — Therapeutic Support',
+        content: `Exercise: Moderate intensity (Zone 2) is preferred. High intensity/volume can trigger flare-ups via excessive cortisol. Focus on resistance training for metabolic support. Emphasize recovery — 48-72h between intense sessions.
+Nutrition: Strict gluten-free often beneficial (molecular mimicry with thyroid tissue). Selenium (200mcg) reduces TPO antibodies. Vitamin D (40-60 ng/mL) is protective. Iron/Ferritin must be optimized for T4 to T3 conversion. Avoid excessive raw goitrogens (cook your kale/broccoli).
+Food Mechanics: Take Levothyroxine 4 hours away from Iron, Calcium, and Coffee. Myo-Inositol (600mg) combined with Selenium may improve TSH.`,
+        sources: ['Liontiris et al., 2017 - Hashimoto\'s and Lifestyle', 'Nordio et al., 2017 - Inositol and Selenium in Hashimoto\'s'],
+        tags: ['hashimotos', 'thyroid', 'autoimmune'],
+        is_custom: false
+    },
+    {
+        category: 'conditions',
+        topic: 'Multiple Sclerosis (MS) — Training & Nutrition',
+        content: `Exercise: Essential for neuroprotection. Resistance training improves mobility and fatigue (EDSS 1.0-6.5). COOLING is critical — use ice vests or cool water if heat sensitivity (Uhthoff's phenomenon) is present. Functional movements prioritized.
+Nutrition: Anti-inflammatory (Swank or Wahls protocols often cited, focus on high-density micronutrients). High Vitamin D (>50 ng/mL). Omega-3 (EPA/DHA 2-3g) for neuro-inflammation. High fiber for gut-brain axis support. Avoid processed fats and sugars.
+Food Mechanics: Sulforaphane (broccoli sprouts) may support Nrf2 pathway/antioxidant defense. Probiotics (Lactobacillus, Bifidobacterium) help manage secondary GI symptoms.`,
+        sources: ['Wahls et al., 2014 - Progress in Neurology and Psychiatry', 'Feige et al., 2020 - Resistance Training in MS'],
+        tags: ['ms', 'neurological', 'autoimmune', 'neuro-inflammation'],
+        is_custom: false
+    },
+    {
+        category: 'conditions',
+        topic: 'General Autoimmune Support — Systemic Nutrition',
+        content: `Principles: Root cause approach focusing on "Gut and Systemic Inflammation".
+Exercise: "Train, don't strain". Exercise induces an anti-inflammatory myokine response (IL-6 from muscle), but overtraining triggers systemic inflammation. Monitor heart rate variability (HRV).
+Nutrition: Eliminate triggers (processed oils, refined sugar). High phytonutrient density (9 cups veg/fruit — greens, sulfur-rich, colorful). Bone broth/Glutamine for gut barrier. Curcumin (with piperine) + Omega-3 for inflammation.
+Food Mechanics: Time meals to support circadian rhythms (reduce late-night inflammation). Sprout/soak grains or remove lectins if sensitive.`,
+        sources: ['Arrieta et al., 2006 - Gut Barrier and Autoimmunity', 'Campbell et al., 2013 - Exercise and Immune Function'],
+        tags: ['autoimmune', 'inflammation', 'gut-health'],
+        is_custom: false
+    },
+    {
+        category: 'conditions',
         topic: 'Hypothyroidism — Training & Nutrition',
         content: `Exercise: Focus on resistance training to counter metabolic slowdown. Moderate intensity preferred over HIIT (excess cortisol worsens thyroid function). Avoid overtraining — recovery is impaired. Include flexibility work.
 Nutrition: Adequate iodine (150mcg/day), selenium (55-200mcg), zinc (8-11mg). Avoid goitrogens raw (broccoli, kale, soy) — cooking deactivates them. Don't take thyroid meds with calcium, iron, or coffee (blocks absorption). Take levothyroxine on empty stomach, 30-60 min before food.
@@ -248,12 +288,31 @@ export function getRelevantKnowledge(clientProfile, knowledgeEntries) {
     if (q.conditions) {
         q.conditions.forEach(c => {
             const lower = c.toLowerCase();
-            if (lower.includes('diabet')) relevantTags.add('diabetes');
+            if (lower.includes('diabet')) {
+                relevantTags.add('diabetes');
+                if (lower.includes('pre')) relevantTags.add('pre-diabetes');
+            }
             if (lower.includes('thyroid') || lower.includes('hypothyroid')) relevantTags.add('thyroid');
-            if (lower.includes('pcos')) relevantTags.add('pcos');
+            if (lower.includes('hashimoto')) {
+                relevantTags.add('hashimotos');
+                relevantTags.add('thyroid');
+                relevantTags.add('autoimmune');
+            }
+            if (lower.includes('ms') || lower.includes('sclerosis')) {
+                relevantTags.add('ms');
+                relevantTags.add('autoimmune');
+            }
+            if (lower.includes('autoimmune') || lower.includes('lupus') || lower.includes('celiac')) {
+                relevantTags.add('autoimmune');
+                relevantTags.add('inflammation');
+            }
+            if (lower.includes('pcos') || lower.includes('pcod')) relevantTags.add('pcos');
             if (lower.includes('hypertension') || lower.includes('blood pressure')) relevantTags.add('hypertension');
             if (lower.includes('pms') || lower.includes('menstrual')) relevantTags.add('female-physiology');
             if (lower.includes('anemi') || lower.includes('iron')) relevantTags.add('iron');
+            if (lower.includes('liver')) relevantTags.add('liver');
+            if (lower.includes('gout')) relevantTags.add('gout');
+            if (lower.includes('arthriti')) relevantTags.add('inflammation');
         });
     }
 

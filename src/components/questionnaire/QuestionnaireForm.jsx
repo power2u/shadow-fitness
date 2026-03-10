@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, ChevronLeft, Check, User, Target, Heart, Moon, Apple, Dumbbell, Activity } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, User, Target, Heart, Moon, Apple, Dumbbell, Activity, Droplets } from 'lucide-react';
 import './QuestionnaireForm.css';
 
 const ALL_STEPS = [
@@ -14,9 +14,11 @@ const ALL_STEPS = [
 ];
 
 const CONDITION_OPTIONS = [
-    'Type 2 Diabetes', 'Type 1 Diabetes', 'Hypothyroidism', 'Hyperthyroidism',
-    'PCOS', 'Hypertension', 'High Cholesterol', 'Anemia', 'IBS', 'GERD',
-    'Asthma', 'Arthritis', 'Depression', 'Anxiety', 'Insomnia', 'Back Pain'
+    'Pre-diabetes', 'Type 2 Diabetes', 'Type 1 Diabetes', 'Hypothyroidism', 'Hashimoto\'s',
+    'Hyperthyroidism', 'PCOS / PCOD', 'Hypertension', 'High Cholesterol', 'Autoimmune Condition',
+    'Multiple Sclerosis (MS)', 'Lupus', 'Celiac Disease', 'Gout', 'Fatty Liver (NAFLD)',
+    'Anemia', 'IBS / IBD', 'GERD', 'Asthma', 'Arthritis', 'Rheumatoid Arthritis',
+    'Depression', 'Anxiety', 'Insomnia', 'Back Pain'
 ];
 
 const GOAL_OPTIONS = ['Fat Loss', 'Muscle Gain', 'Strength', 'Endurance', 'General Health', 'Sports Performance', 'Flexibility', 'Stress Relief'];
@@ -64,13 +66,17 @@ export default function QuestionnaireForm({ onComplete, onCancel }) {
         country: '', cuisinePreference: '',
         primaryGoal: '', secondaryGoals: [], targetWeight: '', timeline: '',
         conditions: [], medications: '', injuries: '', surgeries: '',
-        // Cycle tracking fields (female only)
-        cycle_tracking_enabled: false,
-        last_period_date: '',
-        period_duration: '5',
-        cycle_length: '28',
-        cycle_symptoms: { cramps: 0, fatigue: 0, bloating: 0, headache: 0, mood_changes: 0, sleep_disruption: 0 },
-        cycle_contra_flags: { heavy_bleeding: false, severe_pelvic_pain: false, dizziness: false },
+        // Cycle tracking — split into baseline (persisted) and today (time-scoped)
+        cycle_baseline: {
+            tracking_enabled: false,
+            last_period_start_date: '',
+            typical_cycle_length_days: 28,
+            typical_period_duration_days: 5,
+        },
+        // cycle_today is only populated if coach confirms menstruating today
+        cycle_today: null,
+        // UI-only field (not persisted): tracks the "menstruating today?" gate
+        _is_menstruating_today_answer: null, // null | true | false
         // Lifestyle
         sleepHours: '', stressLevel: '5', occupation: '', activityLevel: '',
         dietType: '', allergies: [], intolerances: [], eatingSchedule: '', digestionIssues: '',
@@ -86,7 +92,21 @@ export default function QuestionnaireForm({ onComplete, onCancel }) {
     const goPrev = () => { setDirection(-1); setStep(s => Math.max(s - 1, 0)); };
 
     const handleSubmit = () => {
-        const { full_name, ...questionnaire } = form;
+        const { full_name, _is_menstruating_today_answer, ...questionnaire } = form;
+        // Assemble cycle_today — only if coach explicitly confirmed menstruating today
+        if (form.cycle_baseline.tracking_enabled && _is_menstruating_today_answer === true) {
+            questionnaire.cycle_today = {
+                is_menstruating_today: true,
+                recorded_at: new Date().toISOString().split('T')[0],
+                symptoms: questionnaire._cycle_symptoms_draft || { cramps: 0, fatigue: 0, bloating: 0, headache: 0, mood_changes: 0, sleep_disruption: 0 },
+                safety_flags: questionnaire._cycle_flags_draft || { heavy_bleeding: false, severe_pelvic_pain: false, dizziness: false },
+            };
+        } else {
+            questionnaire.cycle_today = null;
+        }
+        // Remove internal draft fields
+        delete questionnaire._cycle_symptoms_draft;
+        delete questionnaire._cycle_flags_draft;
         onComplete({ full_name, questionnaire });
     };
 
@@ -215,6 +235,7 @@ export default function QuestionnaireForm({ onComplete, onCancel }) {
             case 'cycle_tracking':
                 return (
                     <div className="form-section">
+                        {/* ── Baseline Gate ── */}
                         <div className="input-group">
                             <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Activity size={16} style={{ color: '#ec4899' }} />
@@ -223,35 +244,39 @@ export default function QuestionnaireForm({ onComplete, onCancel }) {
                             <div className="multi-select" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
                                 {[true, false].map(val => (
                                     <button key={String(val)} type="button"
-                                        className={`multi-select-option ${form.cycle_tracking_enabled === val ? 'selected' : ''}`}
-                                        onClick={() => update('cycle_tracking_enabled', val)}>
-                                        <div className="multi-check">{form.cycle_tracking_enabled === val && <Check size={12} />}</div>
+                                        className={`multi-select-option ${form.cycle_baseline.tracking_enabled === val ? 'selected' : ''}`}
+                                        onClick={() => update('cycle_baseline', { ...form.cycle_baseline, tracking_enabled: val })}>
+                                        <div className="multi-check">{form.cycle_baseline.tracking_enabled === val && <Check size={12} />}</div>
                                         <span>{val ? 'Yes, track cycle' : 'No / Not applicable'}</span>
                                     </button>
                                 ))}
                             </div>
                         </div>
 
-                        {form.cycle_tracking_enabled && (
+                        {/* ── Baseline Fields (shown when tracking enabled) ── */}
+                        {form.cycle_baseline.tracking_enabled && (
                             <>
-                                <div className="form-grid">
+                                <div className="form-grid" style={{ marginTop: 'var(--space-4)' }}>
                                     <div className="input-group">
                                         <label className="input-label">First Day of Last Period *</label>
-                                        <input type="date" className="input-field" value={form.last_period_date}
-                                            onChange={(e) => update('last_period_date', e.target.value)}
+                                        <input type="date" className="input-field"
+                                            value={form.cycle_baseline.last_period_start_date}
+                                            onChange={(e) => update('cycle_baseline', { ...form.cycle_baseline, last_period_start_date: e.target.value })}
                                             max={new Date().toISOString().split('T')[0]} />
                                     </div>
                                     <div className="input-group">
-                                        <label className="input-label">Period Duration (days)</label>
-                                        <select className="input-field select-field" value={form.period_duration}
-                                            onChange={(e) => update('period_duration', e.target.value)}>
+                                        <label className="input-label">Typical Period Duration (days)</label>
+                                        <select className="input-field select-field"
+                                            value={form.cycle_baseline.typical_period_duration_days}
+                                            onChange={(e) => update('cycle_baseline', { ...form.cycle_baseline, typical_period_duration_days: parseInt(e.target.value) })}>
                                             {[3, 4, 5, 6, 7].map(d => <option key={d} value={d}>{d} days</option>)}
                                         </select>
                                     </div>
                                     <div className="input-group">
                                         <label className="input-label">Typical Cycle Length (days)</label>
-                                        <select className="input-field select-field" value={form.cycle_length}
-                                            onChange={(e) => update('cycle_length', e.target.value)}>
+                                        <select className="input-field select-field"
+                                            value={form.cycle_baseline.typical_cycle_length_days}
+                                            onChange={(e) => update('cycle_baseline', { ...form.cycle_baseline, typical_cycle_length_days: parseInt(e.target.value) })}>
                                             {Array.from({ length: 15 }, (_, i) => i + 21).map(d =>
                                                 <option key={d} value={d}>{d} days{d === 28 ? ' (avg)' : ''}</option>
                                             )}
@@ -259,39 +284,68 @@ export default function QuestionnaireForm({ onComplete, onCancel }) {
                                     </div>
                                 </div>
 
+                                {/* ── Menstruating-Today Gate ── */}
                                 <div className="input-group" style={{ marginTop: 'var(--space-4)' }}>
-                                    <label className="input-label">Current Symptoms (0 = None, 3 = Severe)</label>
-                                    <div className="form-grid">
-                                        {Object.entries(form.cycle_symptoms).map(([key, val]) => (
-                                            <div key={key} className="input-group">
-                                                <label className="input-label" style={{ fontSize: 'var(--fs-xs)', textTransform: 'capitalize' }}>
-                                                    {key.replace('_', ' ')}
-                                                </label>
-                                                <div className="range-wrapper">
-                                                    <input type="range" min="0" max="3" value={val}
-                                                        onChange={(e) => update('cycle_symptoms', { ...form.cycle_symptoms, [key]: parseInt(e.target.value) })}
-                                                        className="range-input" />
-                                                    <span className="range-value">{val}/3</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="input-group" style={{ marginTop: 'var(--space-4)' }}>
-                                    <label className="input-label" style={{ color: '#ef4444' }}>⚠️ Safety Flags (Check if applicable)</label>
-                                    <div className="multi-select" style={{ gridTemplateColumns: 'repeat(1, 1fr)' }}>
-                                        {[['heavy_bleeding', 'Heavy Bleeding'], ['severe_pelvic_pain', 'Severe Pelvic Pain'], ['dizziness', 'Dizziness / Lightheadedness']].map(([key, label]) => (
-                                            <button key={key} type="button"
-                                                className={`multi-select-option ${form.cycle_contra_flags[key] ? 'selected' : ''}`}
-                                                onClick={() => update('cycle_contra_flags', { ...form.cycle_contra_flags, [key]: !form.cycle_contra_flags[key] })}
-                                                style={form.cycle_contra_flags[key] ? { borderColor: '#ef4444', background: 'rgba(239, 68, 68, 0.1)' } : {}}>
-                                                <div className="multi-check">{form.cycle_contra_flags[key] && <Check size={12} />}</div>
+                                    <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Droplets size={15} style={{ color: '#ec4899' }} />
+                                        Is this client currently on their period TODAY?
+                                    </label>
+                                    <div className="multi-select" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                                        {[[true, 'Yes'], [false, 'No'], [null, 'Unsure']].map(([val, label]) => (
+                                            <button key={label} type="button"
+                                                className={`multi-select-option ${form._is_menstruating_today_answer === val ? 'selected' : ''}`}
+                                                onClick={() => update('_is_menstruating_today_answer', val)}>
+                                                <div className="multi-check">{form._is_menstruating_today_answer === val && <Check size={12} />}</div>
                                                 <span>{label}</span>
                                             </button>
                                         ))}
                                     </div>
                                 </div>
+
+                                {/* ── TODAY Symptoms (only if menstruating today = Yes) ── */}
+                                {form._is_menstruating_today_answer === true && (
+                                    <>
+                                        <div className="input-group" style={{ marginTop: 'var(--space-4)' }}>
+                                            <label className="input-label">Current Symptoms Today (0 = None, 3 = Severe)</label>
+                                            <div className="form-grid">
+                                                {Object.entries(form._cycle_symptoms_draft || { cramps: 0, fatigue: 0, bloating: 0, headache: 0, mood_changes: 0, sleep_disruption: 0 }).map(([key, val]) => (
+                                                    <div key={key} className="input-group">
+                                                        <label className="input-label" style={{ fontSize: 'var(--fs-xs)', textTransform: 'capitalize' }}>
+                                                            {key.replace('_', ' ')}
+                                                        </label>
+                                                        <div className="range-wrapper">
+                                                            <input type="range" min="0" max="3" value={val}
+                                                                onChange={(e) => update('_cycle_symptoms_draft', {
+                                                                    ...(form._cycle_symptoms_draft || { cramps: 0, fatigue: 0, bloating: 0, headache: 0, mood_changes: 0, sleep_disruption: 0 }),
+                                                                    [key]: parseInt(e.target.value)
+                                                                })}
+                                                                className="range-input" />
+                                                            <span className="range-value">{val}/3</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="input-group" style={{ marginTop: 'var(--space-4)' }}>
+                                            <label className="input-label" style={{ color: '#ef4444' }}>⚠️ Safety Flags (Check if applicable today)</label>
+                                            <div className="multi-select" style={{ gridTemplateColumns: 'repeat(1, 1fr)' }}>
+                                                {[['heavy_bleeding', 'Heavy Bleeding'], ['severe_pelvic_pain', 'Severe Pelvic Pain'], ['dizziness', 'Dizziness / Lightheadedness']].map(([key, label]) => {
+                                                    const flags = form._cycle_flags_draft || { heavy_bleeding: false, severe_pelvic_pain: false, dizziness: false };
+                                                    return (
+                                                        <button key={key} type="button"
+                                                            className={`multi-select-option ${flags[key] ? 'selected' : ''}`}
+                                                            onClick={() => update('_cycle_flags_draft', { ...flags, [key]: !flags[key] })}
+                                                            style={flags[key] ? { borderColor: '#ef4444', background: 'rgba(239, 68, 68, 0.1)' } : {}}>
+                                                            <div className="multi-check">{flags[key] && <Check size={12} />}</div>
+                                                            <span>{label}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </>
                         )}
                     </div>

@@ -2006,8 +2006,8 @@
 }
 
 .focus-select {
-    background: rgba(15, 23, 42, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     color: var(--text-primary);
     padding: 0.5rem;
@@ -2018,7 +2018,7 @@
 
 .focus-select:focus {
     border-color: var(--primary-main);
-    background: rgba(15, 23, 42, 0.8);
+    background: var(--bg-glass-strong);
 }
 
 .focus-select:disabled {
@@ -2130,4 +2130,63 @@
     color: var(--text-primary);
     text-transform: none;
     letter-spacing: normal;
+}
+
+/* ── Focus Metadata Banner ─────────────────────────────────── */
+.focus-meta-banner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-4);
+    border-left: 3px solid var(--accent-violet);
+    background: rgba(123, 47, 247, 0.05);
+    border-radius: var(--radius-md);
+}
+
+[data-theme='light'] .focus-meta-banner {
+    background: rgba(123, 47, 247, 0.06);
+}
+
+.focus-meta-left {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+
+.focus-meta-icon {
+    color: var(--accent-violet);
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.focus-meta-label {
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent-violet);
+    display: block;
+    margin-bottom: var(--space-2);
+}
+
+.focus-meta-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.focus-meta-mul {
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.focus-meta-compliance {
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+    padding-left: calc(16px + var(--space-3));
 }

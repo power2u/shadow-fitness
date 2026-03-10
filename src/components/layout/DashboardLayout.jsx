@@ -4,8 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import {
     LayoutDashboard, Users, Dumbbell, Utensils, BookOpen,
-    LogOut, Activity, ChevronLeft, ChevronRight, Menu, X, Gauge, Shield
+    LogOut, Activity, ChevronLeft, ChevronRight, Menu, X, Gauge, Shield,
+    Sun, Moon
 } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 import UsageOverlay from './UsageOverlay';
 import { tierGuard } from '../../services/tierGuard';
 import './DashboardLayout.css';
@@ -23,6 +25,7 @@ export default function DashboardLayout() {
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const { user, signOut } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const navigate = useNavigate();
 
     // Add Admin conditionally
@@ -93,6 +96,9 @@ export default function DashboardLayout() {
                         {mobileOpen ? <X size={24} /> : <Menu size={24} />}
                     </button>
                     <div className="header-spacer" />
+                    <button className="btn-icon theme-toggle" onClick={toggleTheme} title="Toggle Theme">
+                        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                    </button>
                     <div className="header-user">
                         <div className="user-avatar">
                             {(user?.user_metadata?.full_name || user?.email || 'C')[0].toUpperCase()}
